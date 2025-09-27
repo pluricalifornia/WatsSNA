@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watsonville Landowner Network - ArcGIS</title>
+    
+    <!-- ArcGIS API for JavaScript -->
+    <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css">
+    <script src="https://js.arcgis.com/4.28/"></script>
+    
+    <style>
+        html, body, #viewDiv {
+            padding: 0;
+            margin: 0;
+            height: 100%;
+            width: 100%;
+            font-family: 'Avenir Next', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+        
+        .header {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            z-index: 99;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header h1 {
+            margin: 0 0 5px 0;
+            font-size: 1.8em;
+            color: #2c3e50;
+            font-weight: 300;
+        }
+        
+        .header p {
+            margin: 0;
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            z-index: 99;
+            backdrop-filter: blur(10px);
+            max-width: 300px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        
+        .legend-symbol {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            border-radius: 50%;
+        }
+        
+        .watsonville-symbol {
+            background: #e74c3c;
+            border: 2px solid #c0392b;
+        }
+        
+        .residence-symbol {
+            background: #3498db;
+            border: 2px solid #2980b9;
+        }
+        
+        .line-symbol {
+            width: 20px;
+            height: 3px;
+            border-radius: 2px;
+            background: #95a5a6;
+        }
+        
+        .info-panel {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            z-index: 99;
+            backdrop-filter: blur(10px);
+            max-width: 250px;
+            font-size: 12px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            padding: 3px 0;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        
+        .stat-label {
+            color: #7f8c8d;
+        }
+        
+        .stat-value {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Watsonville Agricultural Land Ownership Network</h1>
+        <p>Geographic connections between Watsonville farmland and absentee landowner residences</p>
+    </div>
+    
+    <div id="viewDiv"></div>
+    
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-symbol watsonville-symbol"></div>
+            <span>Watsonville (Agricultural Land)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-symbol residence-symbol"></div>
+            <span>Landowner Residences</span>
+        </div>
+        <div class="legend-item">
+            <div class="line-symbol"></div>
+            <span>Ownership Connections</span>
+        </div>
+    </div>
+    
+    <div class="info-panel">
+        <h3 style="margin: 0 0 10px 0; color: #2c3e50;">Network Statistics</h3>
+        <div class="stat-item">
+            <span class="stat-label">Total Landowners:</span>
+            <span class="stat-value">11</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Unique Locations:</span>
+            <span class="stat-value">9</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Average Distance:</span>
+            <span class="stat-value">~340 miles</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Furthest Owner:</span>
+            <span class="stat-value">McLean, VA</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Local Owners:</span>
+            <span class="stat-value">1 (La Selva)</span>
+        </div>
+    </div>
+
+    <script>
+        require([
+            "esri/Map",
+            "esri/views/MapView",
+            "esri/Graphic",
+            "esri/layers/GraphicsLayer",
+            "esri/geometry/Point",
+            "esri/geometry/Polyline",
+            "esri/symbols/SimpleMarkerSymbol",
+            "esri/symbols/SimpleLineSymbol",
+            "esri/PopupTemplate"
+        ], function(
+            Map, MapView, Graphic, GraphicsLayer, Point, Polyline, 
+            SimpleMarkerSymbol, SimpleLineSymbol, PopupTemplate
+        ) {
+            
+            // Landowner data with coordinates
+            const landowners = [
+                { landowner: "Boyd Family LLC", residence: "Saratoga, CA", company: "-", lat: 37.2631, lon: -122.0303 },
+                { landowner: "Robdon Properties Llc", residence: "Aptos, CA", company: "Driscoll's", lat: 36.9774, lon: -121.8999 },
+                { landowner: "San Andreas Road Watsonville Llc", residence: "Mclean, VA", company: "Gladstone Land Limited Partnership", lat: 38.9338, lon: -77.1772 },
+                { landowner: "West Beach Street Watsonville, LLC", residence: "Mclean, VA", company: "Gladstone Land Limited Partnership", lat: 38.9338, lon: -77.1772 },
+                { landowner: "Ocean Field Holdings Llc", residence: "Irvine, CA", company: "Fujishige Farms Inc", lat: 33.6846, lon: -117.8265 },
+                { landowner: "Gp Sunset Beach Road Land, LLC", residence: "Irvine, CA", company: "Gem-pack Berries, LLC", lat: 33.6846, lon: -117.8265 },
+                { landowner: "70 Sunset Beachroad Llc", residence: "La Selva, CA", company: "Bontadelli Farms", lat: 36.9147, lon: -121.8522 },
+                { landowner: "SCP-I, L.P.", residence: "Palo Alto, CA", company: "SIRI FAMILY, LLC", lat: 37.4419, lon: -122.1430 },
+                { landowner: "Sweet Darling Sales Inc", residence: "Aptos, CA", company: "-", lat: 36.9774, lon: -121.8999 },
+                { landowner: "Colendich & Vukasovich Vegetable Farms Inc", residence: "Ambler Park, CA", company: "", lat: 37.0902, lon: -121.5661 },
+                { landowner: "Robert B Torbensen Jr", residence: "San Carlos, CA", company: "Inherited from Father Robert \"Toby\" Torbensen", lat: 37.5072, lon: -122.2605 }
+            ];
+            
+            // Watsonville coordinates
+            const watsonville = { lat: 36.9107, lon: -121.7568 };
+            
+            // Group by residence location
+            const residenceGroups = {};
+            landowners.forEach(owner => {
+                if (!residenceGroups[owner.residence]) {
+                    residenceGroups[owner.residence] = {
+                        lat: owner.lat,
+                        lon: owner.lon,
+                        landowners: []
+                    };
+                }
+                residenceGroups[owner.residence].landowners.push(owner);
+            });
+            
+            // Create map
+            const map = new Map({
+                basemap: "gray-vector"
+            });
+            
+            // Create map view
+            const view = new MapView({
+                container: "viewDiv",
+                map: map,
+                center: [-121.7568, 36.9107], // Watsonville
+                zoom: 6
+            });
+            
+            // Create graphics layer
+            const graphicsLayer = new GraphicsLayer();
+            map.add(graphicsLayer);
+            
+            // Add Watsonville point
+            const watsonvillePoint = new Point({
+                longitude: watsonville.lon,
+                latitude: watsonville.lat
+            });
+            
+            const watsonvilleSymbol = new SimpleMarkerSymbol({
+                color: [231, 76, 60, 0.8], // Red
+                outline: {
+                    color: [192, 57, 43],
+                    width: 3
+                },
+                size: 16
+            });
+            
+            const watsonvillePopup = new PopupTemplate({
+                title: "Watsonville, CA",
+                content: `
+                    <b>Agricultural Land Location</b><br>
+                    Total Landowners: ${landowners.length}<br>
+                    Local Owners: 1<br>
+                    Absentee Owners: ${landowners.length - 1}
+                `
+            });
+            
+            const watsonvilleGraphic = new Graphic({
+                geometry: watsonvillePoint,
+                symbol: watsonvilleSymbol,
+                popupTemplate: watsonvillePopup
+            });
+            
+            graphicsLayer.add(watsonvilleGraphic);
+            
+            // Add residence points and connection lines
+            Object.entries(residenceGroups).forEach(([residence, data]) => {
+                // Create residence point
+                const residencePoint = new Point({
+                    longitude: data.lon,
+                    latitude: data.lat
+                });
+                
+                // Symbol size based on number of landowners
+                const symbolSize = 12 + (data.landowners.length * 3);
+                
+                const residenceSymbol = new SimpleMarkerSymbol({
+                    color: [52, 152, 219, 0.8], // Blue
+                    outline: {
+                        color: [41, 128, 185],
+                        width: 2
+                    },
+                    size: symbolSize
+                });
+                
+                // Create popup content
+                const landownerList = data.landowners.map(owner => 
+                    `• ${owner.landowner}${owner.company && owner.company !== '-' && owner.company !== '' ? ` (${owner.company})` : ''}`
+                ).join('<br>');
+                
+                const residencePopup = new PopupTemplate({
+                    title: residence,
+                    content: `
+                        <b>${data.landowners.length} Landowner${data.landowners.length > 1 ? 's' : ''}:</b><br>
+                        ${landownerList}
+                    `
+                });
+                
+                const residenceGraphic = new Graphic({
+                    geometry: residencePoint,
+                    symbol: residenceSymbol,
+                    popupTemplate: residencePopup
+                });
+                
+                graphicsLayer.add(residenceGraphic);
+                
+                // Create connection line
+                const connectionLine = new Polyline({
+                    paths: [
+                        [watsonville.lon, watsonville.lat],
+                        [data.lon, data.lat]
+                    ]
+                });
+                
+                // Line width based on number of connections
+                const lineWidth = 1 + (data.landowners.length * 0.5);
+                
+                const lineSymbol = new SimpleLineSymbol({
+                    color: [149, 165, 166, 0.6], // Gray
+                    width: lineWidth,
+                    style: "solid"
+                });
+                
+                const lineGraphic = new Graphic({
+                    geometry: connectionLine,
+                    symbol: lineSymbol
+                });
+                
+                graphicsLayer.add(lineGraphic);
+            });
+            
+            // Add scale and attribution
+            view.when(() => {
+                view.ui.add("zoom", "top-left");
+            });
+        });
+    </script>
+</body>
+</html>
