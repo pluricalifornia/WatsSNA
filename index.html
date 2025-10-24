@@ -48,11 +48,7 @@
             }
             
             #export-panel {
-                bottom: 10px !important;
-                left: 10px !important;
-                right: 10px !important;
-                top: auto !important;
-                max-width: none !important;
+                display: none !important; /* Hide export buttons on mobile */
             }
         }
         
@@ -278,32 +274,43 @@
             color: #2e7d32;
         }
         
-        /* Mobile-specific share button */
-        .mobile-share-btn {
+        /* Screenshot legend overlay - only visible during screenshot */
+        #screenshot-legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border: 3px solid #0079c1;
+            z-index: 1000;
             display: none;
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
+            max-width: 350px;
+        }
+        
+        #screenshot-legend.show {
+            display: block;
+        }
+        
+        #screenshot-legend h3 {
+            margin: 0 0 10px 0;
+            color: #0079c1;
+            font-size: 16px;
             font-weight: bold;
+            border-bottom: 2px solid #0079c1;
+            padding-bottom: 5px;
         }
         
-        @media (max-width: 768px) {
-            .mobile-share-btn {
-                display: block;
-            }
+        #screenshot-legend .legend-item {
+            margin: 6px 0;
+            font-size: 11px;
         }
         
-        /* Touch-friendly buttons */
-        @media (hover: none) and (pointer: coarse) {
-            .export-btn, .mobile-share-btn {
-                min-height: 44px; /* iOS touch target size */
-            }
+        #screenshot-legend .legend-symbol {
+            width: 18px;
+            height: 18px;
+            margin-right: 8px;
         }
     </style>
 </head>
@@ -315,6 +322,7 @@
     
     <div id="viewDiv"></div>
     
+    <!-- Export panel - hidden on mobile -->
     <div id="export-panel">
         <h3>📄 Export Map</h3>
         <button class="export-btn" id="btn-watsonville">
@@ -326,12 +334,54 @@
         <button class="export-btn" id="btn-national">
             🇺🇸 National Scale
         </button>
-        <button class="mobile-share-btn" id="btn-share">
-            📱 Share Screenshot
-        </button>
         <div id="export-status"></div>
         <div class="export-info">
-            Click to capture and download a high-resolution image. On mobile, use "Share Screenshot" to save or share via apps.
+            Click to capture and download a high-resolution image with legend overlay.
+        </div>
+    </div>
+    
+    <!-- Screenshot-only legend overlay -->
+    <div id="screenshot-legend">
+        <h3>🏢 Company Colors</h3>
+        <div class="legend-item">
+            <div class="legend-symbol" style="background: rgb(255, 215, 0);"></div>
+            <span><strong>Driscoll Strawberry</strong> 🇲🇽</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-symbol" style="background: rgb(230, 25, 75);"></div>
+            <span><strong>Colendich & Vukasovich Ve</strong></span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-symbol" style="background: rgb(60, 180, 75);"></div>
+            <span><strong>Skillicorn Holdings LLC</strong></span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-symbol" style="background: rgb(0, 130, 200);"></div>
+            <span><strong>Gladstone Land Limited Pa</strong></span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-symbol" style="background: rgb(245, 130, 48);"></div>
+            <span><strong>Gem-pack Berries, LLC</strong> 🇲🇽</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-symbol" style="background: rgb(145, 30, 180);"></div>
+            <span><strong>CBS Farms, LLC</strong></span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-symbol" style="background: rgb(255, 20, 147);"></div>
+            <span><strong>UBS Agrivest Farmland Fun</strong></span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-symbol" style="background: rgb(70, 240, 240);"></div>
+            <span><strong>Fujishige Farms Inc</strong> 🇲🇽</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-symbol" style="background: rgb(240, 50, 230);"></div>
+            <span><strong>Bontadelli Farms</strong></span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-symbol" style="background: rgb(255, 69, 0);"></div>
+            <span><strong>Independent/No Company</strong></span>
         </div>
     </div>
     
@@ -574,7 +624,6 @@
                     return companyColors[company];
                 }
                 
-                // CHANGED: Return vibrant color instead of gray
                 return noCompanyColor;
             }
             
@@ -870,7 +919,6 @@
                 document.getElementById('btn-watsonville').addEventListener('click', () => exportMap('watsonville'));
                 document.getElementById('btn-california').addEventListener('click', () => exportMap('california'));
                 document.getElementById('btn-national').addEventListener('click', () => exportMap('national'));
-                document.getElementById('btn-share').addEventListener('click', () => mobileShare());
             }
             
             async function exportMap(scale) {
@@ -878,8 +926,12 @@
                 statusDiv.className = 'show';
                 statusDiv.textContent = 'Preparing export...';
                 
-                const buttons = document.querySelectorAll('.export-btn, .mobile-share-btn');
+                const buttons = document.querySelectorAll('.export-btn');
                 buttons.forEach(btn => btn.disabled = true);
+                
+                // Show screenshot legend
+                const screenshotLegend = document.getElementById('screenshot-legend');
+                screenshotLegend.classList.add('show');
                 
                 try {
                     const originalExtent = view.extent.clone();
@@ -904,7 +956,7 @@
                     await view.when();
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     
-                    statusDiv.textContent = 'Taking screenshot...';
+                    statusDiv.textContent = 'Taking screenshot with legend...';
                     
                     const screenshot = await view.takeScreenshot({
                         format: 'png',
@@ -919,7 +971,7 @@
                     link.click();
                     
                     statusDiv.className = 'show success';
-                    statusDiv.textContent = `✓ Map exported successfully!`;
+                    statusDiv.textContent = `✓ Map with legend exported successfully!`;
                     
                     await view.goTo(originalExtent);
                     
@@ -928,6 +980,9 @@
                     statusDiv.className = 'show error';
                     statusDiv.textContent = '✗ Export failed. Please try again.';
                 } finally {
+                    // Hide screenshot legend
+                    screenshotLegend.classList.remove('show');
+                    
                     buttons.forEach(btn => btn.disabled = false);
                     setTimeout(() => {
                         statusDiv.className = '';
@@ -935,56 +990,7 @@
                 }
             }
             
-            async function mobileShare() {
-                const statusDiv = document.getElementById('export-status');
-                
-                try {
-                    statusDiv.className = 'show';
-                    statusDiv.textContent = 'Capturing screenshot...';
-                    
-                    const screenshot = await view.takeScreenshot({
-                        format: 'png',
-                        quality: 100,
-                        width: 1920,
-                        height: 1080
-                    });
-                    
-                    // Convert dataUrl to blob
-                    const response = await fetch(screenshot.dataUrl);
-                    const blob = await response.blob();
-                    const file = new File([blob], 'watsonville_map.png', { type: 'image/png' });
-                    
-                    // Check if Web Share API is available
-                    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-                        await navigator.share({
-                            files: [file],
-                            title: 'Watsonville Land Network Map',
-                            text: 'Check out this land ownership network visualization'
-                        });
-                        statusDiv.className = 'show success';
-                        statusDiv.textContent = '✓ Shared successfully!';
-                    } else {
-                        // Fallback: download
-                        const link = document.createElement('a');
-                        link.href = screenshot.dataUrl;
-                        link.download = `watsonville_map_${Date.now()}.png`;
-                        link.click();
-                        statusDiv.className = 'show success';
-                        statusDiv.textContent = '✓ Downloaded to your device!';
-                    }
-                } catch (error) {
-                    console.error('Share error:', error);
-                    statusDiv.className = 'show error';
-                    statusDiv.textContent = '✗ Share failed. Please try download button.';
-                } finally {
-                    setTimeout(() => {
-                        statusDiv.className = '';
-                    }, 4000);
-                }
-            }
-            
             window.exportMap = exportMap;
-            window.mobileShare = mobileShare;
         });
         
         function togglePanel() {
