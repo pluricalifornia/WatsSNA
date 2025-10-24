@@ -180,7 +180,7 @@
             "esri/symbols/SimpleLineSymbol",
             "esri/PopupTemplate",
             "esri/geometry/geometryEngine"
-        ], function(Map, MapView, Graphic, GraphicsLayer, Point, Polygon, Polyline, 
+        ], function(EsriMap, MapView, Graphic, GraphicsLayer, Point, Polygon, Polyline, 
                     SimpleFillSymbol, SimpleMarkerSymbol, SimpleLineSymbol, PopupTemplate, geometryEngine) {
             
             // City coordinates for geocoding
@@ -225,7 +225,7 @@
             };
             
             // Create map and view
-            const map = new Map({
+            const map = new EsriMap({
                 basemap: "satellite"
             });
             
@@ -244,9 +244,9 @@
             
             map.addMany([connectionLayer, integrationLayer, parcelLayer, residenceLayer]);
             
-            // Process parcels
-            const residenceMap = new Map();
-            const parcelCentroids = new Map();
+            // FIXED: Use plain object instead of Map for parcelCentroids
+            const residenceLocations = {};  // Changed from Map
+            const parcelCentroids = {};      // Changed from Map
             let totalArea = 0;
             let networkCount = 0;
             
@@ -272,8 +272,8 @@
                         
                         // Get centroid for connections
                         const centroid = parcelPolygon.centroid;
-                        if (!parcelCentroids.has(record.object_id)) {
-                            parcelCentroids.set(record.object_id, centroid);
+                        if (!parcelCentroids[record.object_id]) {
+                            parcelCentroids[record.object_id] = centroid;
                         }
                         
                         // Create parcel fill symbol
@@ -313,12 +313,12 @@
             
             // Create residence markers and connections
             parcelData.forEach((record) => {
-                const centroid = parcelCentroids.get(record.object_id);
+                const centroid = parcelCentroids[record.object_id];
                 if (!centroid) return;
                 
-                const residenceLocations = record.residence.split(';').map(r => r.trim());
+                const residenceLocationsList = record.residence.split(';').map(r => r.trim());
                 
-                residenceLocations.forEach(resLocation => {
+                residenceLocationsList.forEach(resLocation => {
                     if (!resLocation) return;
                     
                     let residenceCoords = cityCoordinates[resLocation];
@@ -333,7 +333,7 @@
                     
                     if (residenceCoords) {
                         // Add or update residence marker
-                        if (!residenceMap.has(resLocation)) {
+                        if (!residenceLocations[resLocation]) {
                             const residencePoint = new Point({
                                 longitude: residenceCoords[0],
                                 latitude: residenceCoords[1]
@@ -361,7 +361,7 @@
                             });
                             
                             residenceLayer.add(residenceGraphic);
-                            residenceMap.set(resLocation, residenceCoords);
+                            residenceLocations[resLocation] = residenceCoords;
                         }
                         
                         // Create connection line from parcel centroid to residence
@@ -399,13 +399,13 @@
                 if (!record.integrated) return;
                 
                 networkCount++;
-                const centroid1 = parcelCentroids.get(record.object_id);
+                const centroid1 = parcelCentroids[record.object_id];
                 if (!centroid1) return;
                 
                 parcelData.forEach((otherRecord, otherIndex) => {
                     if (otherIndex <= index || !otherRecord.integrated) return;
                     
-                    const centroid2 = parcelCentroids.get(otherRecord.object_id);
+                    const centroid2 = parcelCentroids[otherRecord.object_id];
                     if (!centroid2) return;
                     
                     // Check if they're connected
@@ -448,7 +448,7 @@
             // Update statistics
             document.getElementById('parcel-count').textContent = parcelData.length;
             document.getElementById('total-area').textContent = totalArea.toFixed(2) + ' acres';
-            document.getElementById('residence-count').textContent = residenceMap.size;
+            document.getElementById('residence-count').textContent = Object.keys(residenceLocations).length;
             document.getElementById('network-count').textContent = networkCount;
             
             // Hide loading screen
