@@ -9,10 +9,6 @@
     <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css">
     <script src="https://js.arcgis.com/4.28/"></script>
     
-    <!-- html2canvas for PDF export -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    
     <style>
         html, body, #viewDiv {
             padding: 0;
@@ -232,19 +228,19 @@
     <div id="viewDiv"></div>
     
     <div id="export-panel">
-        <h3>📄 Export to PDF</h3>
-        <button class="export-btn" onclick="exportToPDF('watsonville')">
+        <h3>📄 Export Map</h3>
+        <button class="export-btn" id="btn-watsonville">
             🗺️ Watsonville Scale
         </button>
-        <button class="export-btn" onclick="exportToPDF('california')">
+        <button class="export-btn" id="btn-california">
             🏖️ California Scale
         </button>
-        <button class="export-btn" onclick="exportToPDF('national')">
+        <button class="export-btn" id="btn-national">
             🇺🇸 National Scale
         </button>
         <div id="export-status"></div>
         <div class="export-info">
-            Export captures the current map view with all layers and labels at the selected scale.
+            Click to capture and download a high-resolution image at the selected scale.
         </div>
     </div>
     
@@ -364,7 +360,6 @@
         const driscollColor = [255, 215, 0];
         
         let globalView = null;
-        let parcelLayer = null;
         
         require([
             "esri/Map",
@@ -423,27 +418,27 @@
                 "Naples, FL": [-81.7948, 26.1420]
             };
             
-            const map = new EsriMap({
+            const esriMap = new EsriMap({
                 basemap: "satellite"
             });
             
             const view = new MapView({
                 container: "viewDiv",
-                map: map,
+                map: esriMap,
                 center: [-121.7569, 36.9101],
                 zoom: 12
             });
             
             globalView = view;
             
-            parcelLayer = new GraphicsLayer({ title: "Parcels" });
+            const parcelLayerGraphics = new GraphicsLayer({ title: "Parcels" });
             const residenceLayer = new GraphicsLayer({ title: "Residences" });
             const connectionLayer = new GraphicsLayer({ title: "Ownership Connections" });
             const integrationLayer = new GraphicsLayer({ title: "Business Integrations" });
             const driscollLayer = new GraphicsLayer({ title: "Driscoll Network" });
             const labelLayer = new GraphicsLayer({ title: "Labels" });
             
-            map.addMany([connectionLayer, integrationLayer, driscollLayer, parcelLayer, residenceLayer, labelLayer]);
+            esriMap.addMany([connectionLayer, integrationLayer, driscollLayer, parcelLayerGraphics, residenceLayer, labelLayer]);
             
             const residenceLocations = {};
             const parcelCentroids = {};
@@ -548,7 +543,7 @@
                             popupTemplate: parcelPopup
                         });
                         
-                        parcelLayer.add(parcelGraphic);
+                        parcelLayerGraphics.add(parcelGraphic);
                         
                         if (record.company === "Farmland Partners LLC" || record.company === "UBS Agrivest Farmland Fund LP") {
                             const displayName = record.company === "Farmland Partners LLC" ? "Farmland Partners" : "UBS Agrivest";
@@ -771,104 +766,94 @@
                 document.getElementById('loading').classList.add('hidden');
                 view.ui.add("info-panel", "top-right");
                 
-                if (parcelLayer.graphics.length > 0) {
-                    view.goTo(parcelLayer.graphics.toArray());
+                if (parcelLayerGraphics.graphics.length > 0) {
+                    view.goTo(parcelLayerGraphics.graphics.toArray());
                 }
+                
+                // Setup export buttons
+                setupExportButtons();
             });
+            
+            function setupExportButtons() {
+                document.getElementById('btn-watsonville').addEventListener('click', () => exportMap('watsonville'));
+                document.getElementById('btn-california').addEventListener('click', () => exportMap('california'));
+                document.getElementById('btn-national').addEventListener('click', () => exportMap('national'));
+            }
+            
+            async function exportMap(scale) {
+                const statusDiv = document.getElementById('export-status');
+                statusDiv.className = 'show';
+                statusDiv.textContent = 'Preparing export...';
+                
+                const buttons = document.querySelectorAll('.export-btn');
+                buttons.forEach(btn => btn.disabled = true);
+                
+                try {
+                    const originalExtent = view.extent.clone();
+                    
+                    // Navigate to appropriate scale
+                    if (scale === 'watsonville') {
+                        await view.goTo({
+                            center: [-121.7569, 36.9101],
+                            zoom: 12
+                        });
+                    } else if (scale === 'california') {
+                        await view.goTo({
+                            center: [-119.4179, 36.7783],
+                            zoom: 6
+                        });
+                    } else if (scale === 'national') {
+                        await view.goTo({
+                            center: [-98.5795, 39.8283],
+                            zoom: 4
+                        });
+                    }
+                    
+                    // Wait for rendering
+                    await view.when();
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    statusDiv.textContent = 'Taking screenshot...';
+                    
+                    // Use ArcGIS takeScreenshot
+                    const screenshot = await view.takeScreenshot({
+                        format: 'png',
+                        quality: 100,
+                        width: 3000,
+                        height: 2000
+                    });
+                    
+                    // Download the image
+                    const link = document.createElement('a');
+                    link.href = screenshot.dataUrl;
+                    link.download = `watsonville_land_network_${scale}_${Date.now()}.png`;
+                    link.click();
+                    
+                    statusDiv.className = 'show success';
+                    statusDiv.textContent = `✓ Map exported successfully as ${link.download}`;
+                    
+                    // Restore original view
+                    await view.goTo(originalExtent);
+                    
+                } catch (error) {
+                    console.error('Export error:', error);
+                    statusDiv.className = 'show error';
+                    statusDiv.textContent = '✗ Export failed. Please try again.';
+                } finally {
+                    buttons.forEach(btn => btn.disabled = false);
+                    setTimeout(() => {
+                        statusDiv.className = '';
+                    }, 5000);
+                }
+            }
+            
+            // Make exportMap available globally
+            window.exportMap = exportMap;
         });
         
         function togglePanel() {
             const panel = document.getElementById('info-panel');
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        }
-        
-        async function exportToPDF(scale) {
-            const statusDiv = document.getElementById('export-status');
-            statusDiv.className = 'show';
-            statusDiv.textContent = 'Preparing export...';
-            
-            const buttons = document.querySelectorAll('.export-btn');
-            buttons.forEach(btn => btn.disabled = true);
-            
-            try {
-                // Set view extent based on scale
-                const originalExtent = globalView.extent.clone();
-                
-                if (scale === 'watsonville') {
-                    await globalView.goTo({
-                        center: [-121.7569, 36.9101],
-                        zoom: 12
-                    });
-                } else if (scale === 'california') {
-                    await globalView.goTo({
-                        center: [-119.4179, 36.7783],
-                        zoom: 6
-                    });
-                } else if (scale === 'national') {
-                    await globalView.goTo({
-                        center: [-98.5795, 39.8283],
-                        zoom: 4
-                    });
-                }
-                
-                // Wait for map to finish rendering
-                await globalView.when();
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                
-                statusDiv.textContent = 'Capturing map...';
-                
-                // Capture the map view
-                const mapDiv = document.getElementById('viewDiv');
-                const canvas = await html2canvas(mapDiv, {
-                    useCORS: true,
-                    allowTaint: true,
-                    backgroundColor: '#ffffff',
-                    scale: 2
-                });
-                
-                statusDiv.textContent = 'Generating PDF...';
-                
-                // Create PDF
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF({
-                    orientation: 'landscape',
-                    unit: 'mm',
-                    format: 'a4'
-                });
-                
-                const imgData = canvas.toDataURL('image/jpeg', 0.95);
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const pdfHeight = pdf.internal.pageSize.getHeight();
-                
-                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-                
-                // Add title and metadata
-                const scaleTitle = scale === 'watsonville' ? 'Watsonville Scale' : 
-                                  scale === 'california' ? 'California Scale' : 'National Scale';
-                pdf.setFontSize(10);
-                pdf.text(`Watsonville Land Ownership Network - ${scaleTitle}`, 10, pdfHeight - 5);
-                pdf.text(`Generated: ${new Date().toLocaleDateString()}`, pdfWidth - 60, pdfHeight - 5);
-                
-                // Save PDF
-                const filename = `watsonville_land_network_${scale}_${Date.now()}.pdf`;
-                pdf.save(filename);
-                
-                statusDiv.className = 'show success';
-                statusDiv.textContent = `✓ PDF exported successfully as ${filename}`;
-                
-                // Restore original view
-                await globalView.goTo(originalExtent);
-                
-            } catch (error) {
-                console.error('Export error:', error);
-                statusDiv.className = 'show error';
-                statusDiv.textContent = '✗ Export failed. Please try again.';
-            } finally {
-                buttons.forEach(btn => btn.disabled = false);
-                setTimeout(() => {
-                    statusDiv.className = '';
-                }, 5000);
-            }
         }
     </script>
 </body>
